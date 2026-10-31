@@ -2,7 +2,7 @@
 int is_prime(int n)
 {
 	int m, flag = 1;
-	for (m = 2;m <= n / 2;m++)
+	for (m = 2;m*m <= n;m++)
 	{
 		if (n % m == 0)
 		{
