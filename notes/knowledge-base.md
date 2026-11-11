@@ -498,3 +498,66 @@ rsp   0x7ffffffdd58                 ← 栈顶，未被污染
 ---
 
 *最后更新：2026-11-10 22:52*
+
+---
+
+## 十八、Day 11（2026-11-11）：控制流劫持成功
+
+### 18.1 知识点
+
+| 编号 | 知识点 | 一句话要点 | 易错点 / 安全关联 | 掌握度 |
+|---|---|---|---|---|
+| R01 | 写入栈 ≠ 改变寄存器 | 寄存器只在**指令去读它**的那一刻才变 | `rbp` 变了是因为 `pop %rbp` 执行完了；`rip` 没变是因为 `ret` 崩在半路 | ⭐⭐ |
+| R02 | 24 字节的分界线 | 16（`buf`）+ 8（`saved rbp`）= 24；第 25 字节才进 `saved rip` | 用户答成「18 字节」，把两个数记混了 | ⭐ |
+| R03 | 控制流劫持 | 把 `saved rip` 改成目标函数地址 | `main` 里**从没调用过** `secret`，它却执行了 | ⭐⭐ |
+| R04 | 为什么只写 3 字节 | `0x401196` 高 5 字节是 `00`，`strcpy` 遇 `00` 就停 | 高位不是 0（PIE）时必须写满，且中间不能有 0 | ⭐ |
+| R05 | `return` vs `exit(0)` | `return` 是从当前函数返回；`exit` 直接让进程结束 | 被劫持进来的函数，栈上的返回地址是垃圾，`return` 必崩 | ⭐ |
+| R06 | PIE 让 payload 失效 | 地址每次运行都变 | 真实漏洞第一步永远是 info leak（信息泄漏） | ⭐ |
+| R07 | 报错怎么读 | 引号里的那个名字，就是它真正去找的东西 | 今日五次拼写事故：`ws1` / `chmad` / `dayo4` / `pwn,py` / `suborocess` | ⭐⭐ |
+| R08 | `sed -i 's/旧/新/' 文件` | 就地查找替换 | 不加 `-i` 只打印到屏幕，文件不动 | ⭐ |
+| R09 | `ModuleNotFoundError` 判断法 | 先怀疑拼错，再怀疑没装 | 标准库（如 `subprocess`）永远不需要 `pip install` | ⭐ |
+
+### 18.2 实测数据（可复现）
+
+```bash
+$ gcc -Wall -g -fno-stack-protector -no-pie -o exp exp.c
+$ python3 pwn.py
+payload 十六进制 = 414141414141414141414141414141414141414141414141961140
+vulnerable 的地址 =0x4011b7
+secret     的地址 =0x401196
+buf = AAAAAAAAAAAAAAAAAAAAAAAA<非打印字节>
+>>>你跳到了secret!这句话本来永远不会执行<<<
+```
+
+- payload = 24 个 `0x41` + `96 11 40`（`0x401196` 的低 3 字节，小端序）
+- 不含 Python 的等价写法：`./exp "$(printf 'AAAAAAAAAAAAAAAAAAAAAAAA\x96\x11\x40')"`
+- 这是本项目**第一个真正成功的漏洞利用**：程序执行了它本来永远不会执行的代码路径
+
+### 18.3 五次拼写事故（同一根因：手指比眼睛快）
+
+| 打错 | 应该是 | 报错 |
+|---|---|---|
+| `ws1` | `wsl` | `ObjectNotFound: (ws1:String) []` |
+| `chmad` | `chmod` | `Command 'chmad' not found, did you mean:` |
+| `dayo4.md` | `day04.md` | `fatal: pathspec 'notes/day04.md' did not match any files` |
+| `pwn,py` | `pwn.py` | `can't open file '.../pwn,py'` |
+| `suborocess` | `subprocess` | `ModuleNotFoundError: No module named 'suborocess'` |
+
+已给用户的办法：**敲完命令，眼睛扫一眼再按回车。**
+
+### 18.4 用户当晚的五题作答与判定
+
+| # | 问题 | 用户答 | 判定 |
+|---|---|---|---|
+| 1 | payload 为什么是 24 个 A | 「定义十八个字节的空间，溢出 8 个」 | ❌ 是 16 + 8 = 24 |
+| 2 | 第 25 个字节落到哪 | 「后面的地方」 | ◐ 准确说是 `saved rbp` 之后，即 `saved rip` 的存档 |
+| 3 | 为什么只写 3 字节 | 「不知道」 | ❌ 已补讲 |
+| 4 | 为什么用 `exit(0)` 不用 `return` | 「是因为 return 是结束整个程序吗」 | ❌ 反了：`return` 只是函数返回 |
+| 5 | PIE 下还能用吗 | 「不能用」 | ✅ |
+
+### 18.5 Day 12 开场要做
+1. 复习抽 5 条（重点 R01、R04、R05）
+2. 正题：**ASLR / PIE 下怎么打**——信息泄漏（info leak）的第一种形态：把地址打印出来
+3. 欠账：7 个小程序（九九表 / 斐波那契 / 进制转换 / 字符串反转 / 猜数字 / 计算器 / 成绩统计）
+
+*最后更新：2026-11-11 23:10*
