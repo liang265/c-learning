@@ -561,3 +561,63 @@ buf = AAAAAAAAAAAAAAAAAAAAAAAA<非打印字节>
 3. 欠账：7 个小程序（九九表 / 斐波那契 / 进制转换 / 字符串反转 / 猜数字 / 计算器 / 成绩统计）
 
 *最后更新：2026-11-11 23:10*
+
+---
+
+# 第十八章 · Day 13（2026-11-13）ret2win 与控制流劫持实操
+
+## 18.1 知识点（R01–R15）
+
+| 编号 | 知识点 | 一句话要点 | 易错点 / 安全关联 | 掌握度 |
+|---|---|---|---|---|
+| R01 | fgets | 读到换行符也会存进缓冲区 | 和 scanf("%s") 一样，换行符是内容 | ⭐⭐ |
+| R02 | strcspn(s, "\n") | 返回第一个匹配字符的下标 | 名字含义：string complement span | ⭐⭐ |
+| R03 | buf[strcspn(buf,"\n")]='\0' | 把换行符改成字符串结束符 | 不写这行 strlen 会多 1 | ⭐⭐⭐ |
+| R04 | strlen | 数到 \0 为止，不含 \0 | 与 sizeof 的区别（含 \0） | ⭐⭐⭐ |
+| R05 | 隐式声明 | 没 include 头文件时编译器猜返回 int | 64 位下 size_t 指针被截断 | ⭐⭐ |
+| R06 | 头文件对应关系 | string.h → strlen/strcpy/strcspn | 缺了只是 warning 不是 error，仍能编过 | ⭐⭐⭐ |
+| R07 | 覆盖返回地址的长度 | 24 = buf 16 + saved rbp 8 | 第 25–32 字节才是 saved rip | ⭐⭐⭐ |
+| R08 | 栈对齐 | 进函数时 rsp % 16 == 8 | system 内 movaps 要求 16 字节对齐 | ⭐⭐ |
+| R09 | force_align_arg_pointer | 让 gcc 在函数头插 and rsp,-16 | 教学拐杖，真实世界用 ret gadget | ⭐ |
+| R10 | PIE 与硬编码地址 | PIE 开着地址每次变，payload 失效 | 必须 -no-pie 或先 infoleak | ⭐⭐⭐ |
+| R11 | argv[1] 为 NULL | 不给参数时 strcpy 读地址 0 | 段错误；与 11-08 的 ./over1 同因 | ⭐⭐⭐ |
+| R12 | fflush(stdout) | 崩溃时未刷新的缓冲一起丢 | 调试打印必须 fflush | ⭐⭐ |
+| R13 | system("/bin/sh") | 拿到的 shell 是当前用户权限 | uid=1001(sunziyi)，不是 root | ⭐⭐ |
+| R14 | RCE ≠ 提权 | 执行代码 ≠ 拿到 root | 攻陷第一级台阶 | ⭐⭐ |
+| R15 | git add 的原子性 | 一个路径不存在，整条命令失败 | 其余文件也不会被暂存 | ⭐⭐ |
+
+## 18.2 今日实测数据
+
+- `xin1.c`（读一行打印长度）：`abc`→3、空行→0、`hello world`→11
+- 去掉 `buf[strcspn(buf,"\n")]='\0';` 后 `abc` → **4**（换行符被算进长度）
+- 只 `#include <stdio.h>` 编译：`warning: implicit declaration of function 'strcspn'` + `note: include '<string.h>'`
+- 漏 `-no-pie` 时 `win` 地址：`0x628b2adde1e9`（随机）；加回后：`0x4011b6`（固定）
+- `./shell2` 无参数 → Segmentation fault
+- 成功 payload：`41414141…41`（24 个 A）+ `b61140`（低 3 字节小端）
+- 拿到 shell：`uid=1001(sunziyi) gid=1002(sunziyi) groups=1002(sunziyi),27(sudo)`
+- 提交：`61daf89 feat: day 13 ret2win shell + independent coding`，4 files changed, 55 insertions
+
+## 18.3 复习记录（Day 13 补做）
+
+抽 8 条（11-09 / 11-11 / 11-12 三天漏做，一次性补齐）：
+1. `ls -l` 首字符 `-` → 答「一般程序」◐ 订正：文件类型，`-` 普通文件
+2. `bt` 的 `#1` → 答「被调用者」❌ **第三次错**，立记法「#0 是我，#1 是妈，编号越大越往外」
+3. `buf`/`authorized` 偏移 → 答「8」◐ 订正：0 和 8
+4. 一页多少字节 → 4096 ✅
+5. `a[2]` 指针写法 → 答 `2[a]` ◐ 应为 `*(a + 2)`（`2[a]` 也对但不是标准写法）
+6. 24 字节是哪两段 → 答「A + 函数体地址」❌ 订正：buf 16 + saved rbp 8
+7. PIE 开着写死地址 → 失效 ✅
+8. 金丝雀位置与检查时机 → 忘了 ❌ 订正：`rbp-8`，`leave` 之前比对
+
+## 18.4 教学复盘
+
+- **首次独立写出可运行程序**（L3 层），且 `strcspn` 那行是他自己想出来的，未提示换行符坑
+- 用户自己总结出关键认知：「这就是我坚持自己手打一遍的原因」——亲眼见「4」和「3」的差别
+- 我曾想直接把 `shell.c` 复制给他，被他当场拦下：「不应该我自己打一遍吗」。**认错，改为手打 26 行**
+- 用户在 22:38 主动要求继续学（原计划 23:00 睡，周末延长）
+
+## 18.5 待办（Day 14 开场）
+
+1. 开场 5 条复习（重点：`bt` 的 `#1`、24 字节构成、`st` 的偏移）
+2. 正课：不用 `force_align_arg_pointer`，改用 **ret gadget** 做栈对齐（真实世界做法）
+3. 继续欠账：7 个小程序、`day1_prime/.c` 改名 `main.c`、装 VS Code、开 GitHub 2FA
