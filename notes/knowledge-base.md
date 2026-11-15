@@ -621,3 +621,46 @@ buf = AAAAAAAAAAAAAAAAAAAAAAAA<非打印字节>
 1. 开场 5 条复习（重点：`bt` 的 `#1`、24 字节构成、`st` 的偏移）
 2. 正课：不用 `force_align_arg_pointer`，改用 **ret gadget** 做栈对齐（真实世界做法）
 3. 继续欠账：7 个小程序、`day1_prime/.c` 改名 `main.c`、装 VS Code、开 GitHub 2FA
+---
+
+## 十八、Day 15（2026-11-15）工具链与模板
+
+### 18.1 新增知识点
+
+| 编号 | 知识点 | 一句话要点 | 易错点 | 掌握度 |
+|---|---|---|---|---|
+| N01 | `nm` | name list，列出程序符号表（函数名+地址） | 只对未 strip 的二进制有效 | ⭐⭐ |
+| N02 | `objdump -d` 算偏移 | 找 `sub $0x10,%rsp` 得 buf 大小，再 +8 就是到 saved rip 的距离 | 有些人把 0x10 当成 16+8 | ⭐⭐ |
+| N03 | 模板三行 | TARGET / OFFSET / WIN，其余不改 | OFFSET 少一字节就打不中 | ⭐⭐⭐ |
+| N04 | `struct.pack("<Q", x)` | 8 字节小端打包，等价 `to_bytes(8,"little")` | 忘了 `<` 会变成大端 | ⭐⭐ |
+| N05 | `capture_output=True` | 把子进程输出收进 `r.stdout`，不直接打印 | 不写就看不到程序输出 | ⭐⭐ |
+| N06 | `~lab` vs `~/lab` | `~name` 是「用户 name 的家目录」 | 少一个斜杠就在当前目录建垃圾目录 | ⭐⭐⭐ |
+| N07 | Python 前导零 | `004011` 直接报错，必须写 `0x4011` | C 里 `0755` 反而是八进制 | ⭐⭐ |
+| N08 | `cp` 复制到自己 | 源和目标是同一文件，cp 拒绝执行 | 必须先进目标目录再 cp | ⭐⭐⭐ |
+| N09 | `git add` 原子性 | 列出的文件只要有一个不存在，整条命令全失败 | 报 `did not match any files` | ⭐⭐⭐ |
+| N10 | 无泄漏靶 | 程序不打印地址，靠 nm/objdump 自己找 | 需要固定基址，所以 `-no-pie` | ⭐⭐ |
+
+### 18.2 今日实测
+
+- 靶子 `chal.c`：`char buf[16]; read(0, buf, 64);`，另有 `get_flag()` 打印 FLAG 并 `_exit(0)`，`main` 从不调用它。
+- `nm chal | grep get_flag` → `00000000004011b6 T get_flag`
+- `objdump -d chal` 里 `vuln` 的 `sub $0x10,%rsp` → buf 16 字节 → 偏移 24
+- payload `24 个 A + p64(0x4011b6)` → 输出 `FLAG{you_hijacked_the_flow}`，`returncode = 0`
+- 这次不需要 ret gadget：`get_flag` 只调 `printf`，不触发 `movaps`
+
+### 18.3 复习记录（Day 15 开场，5 条）
+
+| 题 | 结果 |
+|---|---|
+| `call` 前 vs 进门时的余数 | ✅ |
+| `ret` 少做了什么 | ✅ |
+| `ret gadget` | ❌ 已重讲 |
+| `bt` 的 `#1` 是谁 | ✅ 连续第 4 次答对 |
+| `\t` vs `\n` | ◐ 是制表符，不是空格 |
+
+### 18.4 当日复盘
+
+- 全程按 L2 填空完成，没给完整代码，成功打通。
+- 摩擦点集中在 shell 基础操作（cd / cp / git add 原子性），不在安全概念上。
+- 已清账：`notes/day02.md` 每行开头的反斜杠（10-31 遗留，欠了半个月）。
+- 已装 VS Code 1.146.0 + WSL 扩展 v1.104.7；`.bashrc` 已加 `code` 的 PATH。
